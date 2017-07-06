@@ -50,9 +50,16 @@ def fnGetUserAndProductFeatures(pDfPriors, pDfOrders):
 
     #4.compute count of product ordered in last 2 orders:
     #if a product was orderd in last 2 orders, then 2, if only 1 of last 2 orders then 1
-    #assume pDfOrders is already sorted
-    pDfPriors.sort(inplace =True, columns=['user_id','order_number'], ascending=[True,  False])
-    dfTempLast2Orders =pDfOrders.groupby(['user_id'])['user_id','order_number'].head(2)
+    #assume pDfPriors is already sorted
+    dfTempLast2Orders =pDfPriors.groupby(['user_id','order_number'])['user_id','order_number'].size().to_frame()
+
+    dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(0)
+    dfTempLast2Orders['order_number'] =dfTempLast2Orders.index.get_level_values(1)
+
+    dfTempLast2Orders.sort(inplace =True, columns=['user_id','order_number'], ascending=[True,  False])
+
+
+    dfTempLast2Orders =dfTempLast2Orders.groupby(['user_id'])['user_id','order_number'].head(2)
     #join on priors only get last 2 orders by product, user
     dfTempLast2Orders =dfTempLast2Orders.merge(pDfPriors,on =['order_number','user_id'],suffixes =('_del',''))
 
