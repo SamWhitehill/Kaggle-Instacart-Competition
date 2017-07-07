@@ -51,34 +51,34 @@ def fnGetUserAndProductFeatures(pDfPriors, pDfOrders):
     #4.compute count of product ordered in last 2 orders:
     #if a product was orderd in last 2 orders, then 2, if only 1 of last 2 orders then 1
     #assume pDfPriors is already sorted
-    dfTempLast2Orders =pDfPriors.groupby(['user_id','order_number'])['user_id','order_number'].size().to_frame()
+    #dfTempLast2Orders =pDfPriors.groupby(['user_id','order_number'])['user_id','order_number'].size().to_frame()
 
-    dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(0)
-    dfTempLast2Orders['order_number'] =dfTempLast2Orders.index.get_level_values(1)
+    #dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(0)
+    #dfTempLast2Orders['order_number'] =dfTempLast2Orders.index.get_level_values(1)
 
-    dfTempLast2Orders.sort(inplace =True, columns=['user_id','order_number'], ascending=[True,  False])
+    #dfTempLast2Orders.sort(inplace =True, columns=['user_id','order_number'], ascending=[True,  False])
 
 
-    dfTempLast2Orders =dfTempLast2Orders.groupby(['user_id'])['user_id','order_number'].head(2)
+    #dfTempLast2Orders =dfTempLast2Orders.groupby(['user_id'])['user_id','order_number'].head(2)
     #join on priors only get last 2 orders by product, user
-    dfTempLast2Orders =dfTempLast2Orders.merge(pDfPriors,on =['order_number','user_id'],suffixes =('_del',''))
+    #dfTempLast2Orders =dfTempLast2Orders.merge(pDfPriors,on =['order_number','user_id'],suffixes =('_del',''))
 
     ##dfTempLast2Orders.drop('product_id_del',inplace =True)
     #dfTempLast2Orders.drop('user_id_del',inplace =True)
 
-    dfTempLast2Orders =dfTempLast2Orders.groupby(['product_id','user_id']).size().to_frame('NumTimesInLast2Orders')
+    #dfTempLast2Orders =dfTempLast2Orders.groupby(['product_id','user_id']).size().to_frame('NumTimesInLast2Orders')
 
-    dfTempLast2Orders['product_id'] =dfTempLast2Orders.index.get_level_values(0)
-    dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(1)
+    #dfTempLast2Orders['product_id'] =dfTempLast2Orders.index.get_level_values(0)
+    #dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(1)
 
     #should left join here, may not have the prod. in last 2 orders!
-    dfResult =dfResult.merge(dfTempLast2Orders,on =['product_id','user_id'], suffixes =('_del',''),how='left')
-    dfResult['NumTimesInLast2Orders'].fillna(0, inplace=True) #fill na's with zero
-    del dfTempLast2Orders
+    #dfResult =dfResult.merge(dfTempLast2Orders,on =['product_id','user_id'], suffixes =('_del',''),how='left')
+    #dfResult['NumTimesInLast2Orders'].fillna(0, inplace=True) #fill na's with zero
+    #del dfTempLast2Orders
     #dfResult.drop('product_id_del',inplace =True)
     #dfResult.drop('user_id_del',inplace =True)
 
-    return dfResult
+    return dfResult[['user_id','product_id','UP_orders','UP_last_order_id','UP_average_pos_in_cart']]
 
 
 def fnGetProductReorderRatioAcrossUsers(pDfPriors):
@@ -281,7 +281,7 @@ def fnMain():
 
     ### build list of candidate products to reorder, with features ###
 
-    def features(selected_orders, labels_given=False,dfReorderRatioAcrossUsers=None):
+    def features(selected_orders, labels_given=False,dfReorderRatioAcrossUsers=None, userAndproduct =None):
         print('build candidate list')
         order_list = []
         product_list = []
@@ -324,11 +324,11 @@ def fnMain():
         df['product_reorders'] = df.product_id.map(products.reorders)
         df['product_reorder_rate'] = df.product_id.map(products.reorder_rate)
 
-        print('user_X_product related features')
+        print('use and product related features')
         #merge in userAndProduct dataframe which is created faster
-        df =df.merge(userAndproduct,on =['user_id','product_id'],suffixes =('_del',''),how='left')
+        df =df.merge(userAndproduct,on =['user_id','product_id'],suffixes =('','_del'),how='left')
 
-        df.drop(['user_id_del'],inplace=True)
+        #df.drop(['user_id_del'],inplace=True)
         #df.drop(['product_id_del'],inplace=True)
         
         df['z'] = df.user_id * 100000 + df.product_id
@@ -348,6 +348,7 @@ def fnMain():
         df.drop(['product_id_re'],axis=1,inplace=True)
             
         del dfReorderRatioAcrossUsers
+        del userAndproduct
         #df.drop(['UP_last_order_id', 'z'], axis=1, inplace=True)
         print(df.dtypes)
         print(df.memory_usage())
@@ -359,18 +360,21 @@ def fnMain():
     #test_orders.to_csv("test_orders.csv")
     blnLoadCSVFiles =True
     if blnLoadCSVFiles:
-        df_train, labels = features(train_orders, labels_given=True,dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers)
+        df_train, labels = features(train_orders, labels_given=True,
+        dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers,userAndproduct=userAndproduct)
         #df_test, _ = features(test_orders)
 
         df_train.to_csv("df_train.csv")
     if blnLoadCSVFiles:
         test_orders=pd.read_csv("test_orders.csv")
     
-        df_test, _ = features(test_orders,labels_given=False,dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers)
+        df_test, _ = features(test_orders,labels_given=False,
+        dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers,userAndproduct=userAndproduct)
+
         df_test.to_csv("df_test.csv")
 
 
-        
+        del userAndproduct
     #print ('ONLY USING A SMALL SAMPLE FOR SPEED')
 
     #print ('***uncomment blocking of df_train later')
@@ -398,7 +402,7 @@ def fnMain():
            'aisle_id',  'product_orders', 'product_reorders', #'department_id'
            'product_reorder_rate', # 'UP_orders', #'UP_orders_ratio' -duplicate definition
            'UP_average_pos_in_cart', 'UP_reorder_rate', 'UP_orders_since_last',
-           'UP_delta_hour_vs_last','ReorderRatioAcrossUsers','NumTimesInLast2Orders'] # 'dow', 'UP_same_dow_as_last_o rder'
+           'UP_delta_hour_vs_last','ReorderRatioAcrossUsers','dow'] # 'dow', 'UP_same_dow_as_last_o rder'
 
     if True:
         df_train =df_train[f_to_use]
