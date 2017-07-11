@@ -31,6 +31,14 @@ def fnGetUserAndProductFeatures(pDfPriors, pDfOrders):
     pDfPriors.sort(inplace =True, columns=['user_id','product_id','order_number'], ascending=[True, True, False])
     dfMaxOrderId =pDfPriors.groupby(['user_id','product_id'])['user_id','product_id','order_id','order_number'].head(1)
     dfMaxOrderId['UP_last_order_id'] =dfMaxOrderId['order_id']
+    
+    
+    #2a. get min order number
+    pDfPriors.sort(inplace =True, columns=['user_id','product_id','order_number'], ascending=[True, True, True])
+    dfMinOrderNum =pDfPriors.groupby(['user_id','product_id'])['user_id','product_id','order_number'].head(1)
+    dfMinOrderNum['UP_first_order'] =dfMinOrderNum['order_number']
+
+       
     #3. avg position in cart:
 
     dfAddtoCartMean=pDfPriors.groupby(['product_id','user_id'])['add_to_cart_order'].mean().to_frame('UP_average_pos_in_cart')
@@ -48,37 +56,42 @@ def fnGetUserAndProductFeatures(pDfPriors, pDfOrders):
     #dfResult.drop('product_id_del',inplace =True)
     #dfResult.drop('user_id_del',inplace =True)
 
+    dfResult =dfResult.merge(dfMinOrderNum,on =['product_id','user_id'], suffixes =('','_del'))
+    del dfMinOrderNum
+
     #4.compute count of product ordered in last 2 orders:
     #if a product was orderd in last 2 orders, then 2, if only 1 of last 2 orders then 1
-    #assume pDfPriors is already sorted
-    #dfTempLast2Orders =pDfPriors.groupby(['user_id','order_number'])['user_id','order_number'].size().to_frame()
+    #collapse pdfpriors down to 1 record per user per order
+    if False:
+        dfTempLast2Orders =pDfPriors.groupby(['user_id','order_number'])['user_id','order_number'].size().to_frame()
 
-    #dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(0)
-    #dfTempLast2Orders['order_number'] =dfTempLast2Orders.index.get_level_values(1)
+        dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(0)
+        dfTempLast2Orders['order_number'] =dfTempLast2Orders.index.get_level_values(1)
 
-    #dfTempLast2Orders.sort(inplace =True, columns=['user_id','order_number'], ascending=[True,  False])
+        dfTempLast2Orders.sort(inplace =True, columns=['user_id','order_number'], ascending=[True,  False])
 
 
-    #dfTempLast2Orders =dfTempLast2Orders.groupby(['user_id'])['user_id','order_number'].head(2)
-    #join on priors only get last 2 orders by product, user
-    #dfTempLast2Orders =dfTempLast2Orders.merge(pDfPriors,on =['order_number','user_id'],suffixes =('_del',''))
+        dfTempLast2Orders =dfTempLast2Orders.groupby(['user_id'])['user_id','order_number'].head(2)
+        dfTempLast2Orders =dfTempLast2Orders[['user_id','order_number']]
+        #join on priors only get last 2 orders by product, user
+        dfTempLast2Orders =dfTempLast2Orders.merge(pDfPriors,on =['order_number','user_id'],suffixes =('_del',''))
 
-    ##dfTempLast2Orders.drop('product_id_del',inplace =True)
-    #dfTempLast2Orders.drop('user_id_del',inplace =True)
+        ##dfTempLast2Orders.drop('product_id_del',inplace =True)
+        #dfTempLast2Orders.drop('user_id_del',inplace =True)
 
-    #dfTempLast2Orders =dfTempLast2Orders.groupby(['product_id','user_id']).size().to_frame('NumTimesInLast2Orders')
+        dfTempLast2Orders =dfTempLast2Orders.groupby(['product_id','user_id']).size().to_frame('NumTimesInLast2Orders')
 
-    #dfTempLast2Orders['product_id'] =dfTempLast2Orders.index.get_level_values(0)
-    #dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(1)
+        dfTempLast2Orders['product_id'] =dfTempLast2Orders.index.get_level_values(0)
+        dfTempLast2Orders['user_id'] =dfTempLast2Orders.index.get_level_values(1)
 
-    #should left join here, may not have the prod. in last 2 orders!
-    #dfResult =dfResult.merge(dfTempLast2Orders,on =['product_id','user_id'], suffixes =('_del',''),how='left')
-    #dfResult['NumTimesInLast2Orders'].fillna(0, inplace=True) #fill na's with zero
-    #del dfTempLast2Orders
+        #should left join here, may not have the prod. in last 2 orders!
+        dfResult =dfResult.merge(dfTempLast2Orders,on =['product_id','user_id'], suffixes =('','_del'),how='left')
+        dfResult['NumTimesInLast2Orders'].fillna(0, inplace=True) #fill na's with zero
+        del dfTempLast2Orders
     #dfResult.drop('product_id_del',inplace =True)
     #dfResult.drop('user_id_del',inplace =True)
 
-    return dfResult[['user_id','product_id','UP_orders','UP_last_order_id','UP_average_pos_in_cart']]
+    return dfResult[['user_id','product_id','UP_orders','UP_last_order_id','UP_average_pos_in_cart','UP_first_order']]
 
 
 def fnGetProductReorderRatioAcrossUsers(pDfPriors):
@@ -138,7 +151,7 @@ def fnMain():
     #import lightgbm as lgb
     IDIR = '../input/'
     IDIR = 'C:\\KAGGLE\\InstaCart\\'
-    blnLoadCSVFiles =True
+    blnLoadCSVFiles =False
 
     if blnLoadCSVFiles:
 	    print('loading prior')
@@ -201,8 +214,8 @@ def fnMain():
 
 	    print('computing user f')
 	    usr = pd.DataFrame()
-	    usr['average_days_between_orders'] = orders.groupby('user_id')['days_since_prior_order'].mean().astype(np.float32)
-	    usr['nb_orders'] = orders.groupby('user_id').size().astype(np.int16)
+	    usr['average_days_between_orders'] = priors.groupby('user_id')['days_since_prior_order'].mean().astype(np.float32)
+	    usr['nb_orders'] = priors.groupby('user_id').size().astype(np.int16)
 
 	    users = pd.DataFrame()
 	    users['total_items'] = priors.groupby('user_id').size().astype(np.int16)
@@ -328,10 +341,12 @@ def fnMain():
         #merge in userAndProduct dataframe which is created faster
         df =df.merge(userAndproduct,on =['user_id','product_id'],suffixes =('','_del'),how='left')
 
+        #add  up_order_rate_since_first_order
+        df['up_order_rate_since_first_order'] =df['UP_orders']/ (df['user_total_orders'] -df['UP_first_order'] +1)
         #df.drop(['user_id_del'],inplace=True)
         #df.drop(['product_id_del'],inplace=True)
         
-        df['z'] = df.user_id * 100000 + df.product_id
+        #df['z'] = df.user_id * 100000 + df.product_id
         df.drop(['user_id'], axis=1, inplace=True)
         #df['UP_orders'] = df.z.map(userAndproduct.nb_orders)
         #df['UP_orders_ratio'] = (df.UP_orders / df.user_total_orders).astype(np.float32)
@@ -358,10 +373,10 @@ def fnMain():
     #start here on 6.25.2017
 
     #test_orders.to_csv("test_orders.csv")
-    blnLoadCSVFiles =True
+    blnLoadCSVFiles =False
     if blnLoadCSVFiles:
         df_train, labels = features(train_orders, labels_given=True,
-        dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers,userAndproduct=userAndproduct)
+            dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers,userAndproduct=userAndproduct)
         #df_test, _ = features(test_orders)
 
         df_train.to_csv("df_train.csv")
@@ -369,7 +384,7 @@ def fnMain():
         test_orders=pd.read_csv("test_orders.csv")
     
         df_test, _ = features(test_orders,labels_given=False,
-        dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers,userAndproduct=userAndproduct)
+            dfReorderRatioAcrossUsers=dfReorderRatioAcrossUsers,userAndproduct=userAndproduct)
 
         df_test.to_csv("df_test.csv")
 
@@ -378,16 +393,17 @@ def fnMain():
     #print ('ONLY USING A SMALL SAMPLE FOR SPEED')
 
     #print ('***uncomment blocking of df_train later')
-    if False:
+    if True:
         #df_train =pd.read_csv("df_train_sample.csv")
         df_train =pd.read_csv("df_train.csv")
         print ('num records in training set ', len(df_train))
         #df_train=df_train[:400000]
 
         #labels =np.loadtxt("labels_train_sample.csv",delimiter=',')
-    labels =np.loadtxt("labels_train.csv",delimiter=',')
-        #df_train =df_train[:600000]
-        #labels =labels[:600000]
+    if True:
+        labels =np.loadtxt("labels_train.csv",delimiter=',')
+        df_train =df_train[:600000]
+        labels =labels[:600000]
     #labels=labels[:400000]
     
     #df_train =fEncodeValues(df_train)
@@ -401,8 +417,8 @@ def fnMain():
            'order_hour_of_day', 'days_since_prior_order', 'days_since_ratio',
            'aisle_id',  'product_orders', 'product_reorders', #'department_id'
            'product_reorder_rate', # 'UP_orders', #'UP_orders_ratio' -duplicate definition
-           'UP_average_pos_in_cart', 'UP_reorder_rate', 'UP_orders_since_last',
-           'UP_delta_hour_vs_last','ReorderRatioAcrossUsers','dow'] # 'dow', 'UP_same_dow_as_last_o rder'
+           'UP_average_pos_in_cart', 'UP_reorder_rate', 'UP_orders_since_last','UP_first_order',
+           'UP_delta_hour_vs_last','ReorderRatioAcrossUsers','dow','up_order_rate_since_first_order'] # 'dow', 'UP_same_dow_as_last_o rder'
 
     if True:
         df_train =df_train[f_to_use]
@@ -418,7 +434,7 @@ def fnMain():
 
 
     ROUNDS = 100
-
+    #only needed for training
     if True:
         lenData =int(len(df_train)*.75)
     
@@ -443,6 +459,7 @@ def fnMain():
     xgb_params ={'n_estimators': 571, 'alpha': 0.76959019539935369, 'colsample_bytree': 0.95, 'silent': 
 
     0, 'min_child_weight': 10, 'subsample': 0.65339831580156815, 'eta': 0.46886915041589994, 
+    'eval_metric':'logloss',
 
     'objective': 'reg:logistic', 'max_depth': 9, 'gamma': 6, 'lambda': 17.162265206257807}
     #548, 0.20421433333333336)
@@ -468,10 +485,11 @@ def fnMain():
     #cvResult = xgb.cv(xgb_params, dtrain, num_boost_round=200,feval=xg_f1,maximize=True,nfold=3,
     #                      early_stopping_rounds=30, verbose_eval=30, as_pandas=True)
     model=None
-    #cvResult=fnOptSearch(dtrain,labels,model)
+    cvResult=fnOptSearch(dtrain,labels,model)
     #print (cvResult)
     #len(cv_output)
-    if  True:
+    
+    if True:
         model = xgb.train(dict(xgb_params), dtrain, num_boost_round= num_boost_rounds,
                           feval=xg_f1,evals=[(evalSet,'test')],maximize=True,
                           verbose_eval=50,early_stopping_rounds=60)
@@ -495,8 +513,9 @@ def fnMain():
     # save model to file
     #model =pickle.load("xgbModel.pickle.dat")
 
-    THRESHOLD =0.20723499816  # try .19 guess, should be tuned with crossvalidation on a subset of train data
-    #THRESHOLD =0.1923499816 
+    #THRESHOLD =0.20723499816  # try .19 guess, should be tuned with crossvalidation on a subset of train data
+    #THRESHOLD =0.1723499816 #scores .37658
+    THRESHOLD =0.1653499816 #score
     '''
     #PREDICTION on validation set
     '''
@@ -522,7 +541,7 @@ def fnMain():
 
 
     # lgb.plot_importance(bst, figsize=(9,20))
-    if False:
+    if True:
         del dtrain
 
     ### build candidates list for test ###
